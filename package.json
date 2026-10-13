@@ -1,0 +1,22 @@
+{
+  "name": "local-chain-map",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "fetch": "node scripts/fetch.mjs",
+    "fetch:detail": "node scripts/fetch-detail.mjs",
+    "parse": "node scripts/parse.mjs",
+    "geocode": "node scripts/geocode.mjs",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^5.0.0",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "cheerio": "^1.2.0",
+    "iconv-lite": "^0.7.3"
+  }
+}

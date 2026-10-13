@@ -1,0 +1,336 @@
+---
+// ローカルチェーン店マップ
+// データの作り方：npm run fetch → npm run parse → npm run geocode
+import data from '../data/stores.json';
+
+const { updatedAt, stores } = data;
+const title = 'ローカルチェーン店マップ｜オークワ・エバグリーン';
+const description = '和歌山発のスーパー「オークワ」「スーパーエバグリーン」とドラッグストア「エバグリーン」の店舗を地図で探せます。';
+
+const CHAIN_ORDER = ['オークワ', 'スーパーエバグリーン', 'エバグリーン'];
+const chains = CHAIN_ORDER.filter((c) => stores.some((s) => s.chain === c));
+const PREF_ORDER = ['和歌山県', '大阪府', '奈良県', '三重県', '愛知県', '岐阜県', '静岡県'];
+const prefs = [...new Set(stores.map((s) => s.pref))].sort(
+  (a, b) => (PREF_ORDER.indexOf(a) + 1 || 99) - (PREF_ORDER.indexOf(b) + 1 || 99)
+);
+const countBy = (key, value) => stores.filter((s) => s[key] === value).length;
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#3c3a36" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>ローカルチェーン店マップ</h1>
+      <div class="controls">
+        <div class="chains" role="group" aria-label="チェーンで絞り込み">
+          {chains.map((c, i) => (
+            <label class="chip" style={`--c: var(--chain-${i})`}>
+              <input type="checkbox" value={c} checked />
+              <span class="dot"></span>{c}<small>{countBy('chain', c)}</small>
+            </label>
+          ))}
+        </div>
+        <select id="pref" aria-label="都道府県で絞り込み">
+          <option value="all">すべての地域</option>
+          {prefs.map((p) => <option value={p}>{p}（{countBy('pref', p)}）</option>)}
+        </select>
+      </div>
+    </header>
+
+    {stores.length === 0 ? (
+      <p class="empty">店舗データがまだありません。<code>npm run parse</code> と <code>npm run geocode</code> を実行してください。</p>
+    ) : (
+      <>
+        <div class="map-wrap">
+          <div id="map" aria-label="地図"></div>
+          <button type="button" id="locate" class="locate">現在地</button>
+        </div>
+        <section class="list">
+          <p class="count" id="count"></p>
+          <ul id="stores"></ul>
+        </section>
+      </>
+    )}
+
+    <footer>
+      <p>店舗情報は各社公式サイトの店舗一覧をもとに作成しています（{updatedAt} 時点）。最新の営業時間などは各社公式サイトでご確認ください。</p>
+      <p>このサイトは個人が作成したもので、各社とは関係ありません。</p>
+    </footer>
+
+    <div id="store-data" hidden data-stores={JSON.stringify(stores)} data-chains={JSON.stringify(chains)}></div>
+
+    <script>
+      import L from 'leaflet';
+      import 'leaflet/dist/leaflet.css';
+
+      const dataEl = document.getElementById('store-data');
+      const stores = JSON.parse(dataEl.dataset.stores);
+      const chains = JSON.parse(dataEl.dataset.chains);
+
+      if (stores.length > 0) {
+        const css = getComputedStyle(document.documentElement);
+        const colorOf = (chain) => css.getPropertyValue(`--chain-${chains.indexOf(chain)}`).trim();
+
+        const mapUrl = (s) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${s.name} ${s.address}`)}`;
+        // おおよその位置の店は、ピンの場所ではなく店名＋住所で経路を探してもらう
+        const routeUrl = (s) =>
+          `https://www.google.com/maps/dir/?api=1&destination=${
+            s.coordSource === 'approx' ? encodeURIComponent(`${s.name} ${s.address}`) : `${s.lat},${s.lng}`
+          }`;
+
+        const map = L.map('map', { preferCanvas: true }).setView([34.23, 135.3], 9);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        }).addTo(map);
+
+        function link(text, href, primary) {
+          const a = document.createElement('a');
+          a.textContent = text;
+          a.href = href;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.className = primary ? 'btn btn-primary' : 'btn';
+          return a;
+        }
+
+        function line(cls, text) {
+          const p = document.createElement('p');
+          p.className = cls;
+          p.textContent = text;
+          return p;
+        }
+
+        function card(s) {
+          const box = document.createElement('div');
+          box.className = 'card';
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.style.setProperty('--c', colorOf(s.chain));
+          badge.textContent = s.chain;
+          const name = document.createElement('h3');
+          name.textContent = s.name;
+          box.append(badge, name);
+          if (s.hours) box.append(line('meta', `営業時間：${s.hours}`));
+          if (s.phone) {
+            const p = line('meta', '電話：');
+            const tel = document.createElement('a');
+            tel.href = `tel:${s.phone.replace(/[^0-9]/g, '')}`;
+            tel.textContent = s.phone;
+            p.append(tel);
+            box.append(p);
+          }
+          box.append(line('addr', s.address));
+          if (s.coordSource === 'approx') {
+            box.append(line('approx', '※ 地図のピンはおおよその位置（町の中心）です。正確な場所はGoogleマップで確認してください'));
+          }
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+          actions.append(link('公式の店舗ページ', s.url, true), link('Googleマップ', mapUrl(s)), link('経路', routeUrl(s)));
+          box.append(actions);
+          return box;
+        }
+
+        const markers = stores.map((s) => {
+          const m = L.circleMarker([s.lat, s.lng], {
+            radius: 7,
+            color: '#fff',
+            weight: 2,
+            fillColor: colorOf(s.chain),
+            fillOpacity: 0.95,
+          });
+          m.bindPopup(() => card(s), { maxWidth: 290 });
+          return { store: s, marker: m };
+        });
+
+        let first = true;
+        function render() {
+          const onChains = [...document.querySelectorAll('.chains input:checked')].map((i) => i.value);
+          const pref = document.getElementById('pref').value;
+          const shown = markers.filter(
+            ({ store }) => onChains.includes(store.chain) && (pref === 'all' || store.pref === pref)
+          );
+          for (const { marker } of markers) marker.remove();
+          for (const { marker } of shown) marker.addTo(map);
+
+          const list = document.getElementById('stores');
+          list.innerHTML = '';
+          for (const { store, marker } of shown) {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'row';
+            btn.innerHTML = `<span class="dot" style="--c:${colorOf(store.chain)}"></span><span class="row-main"><span class="row-name"></span><span class="row-addr"></span></span>`;
+            btn.querySelector('.row-name').textContent = store.name;
+            btn.querySelector('.row-addr').textContent = store.address;
+            btn.addEventListener('click', () => {
+              map.flyTo([store.lat, store.lng], 15, { duration: 0.6 });
+              marker.openPopup();
+              document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+            li.append(btn);
+            list.append(li);
+          }
+          document.getElementById('count').textContent = `${shown.length}店`;
+
+          // 最初の表示は和歌山県を中心に、それ以降は表示中の店が収まるように
+          if (shown.length > 0) {
+            const target = first ? shown.filter(({ store }) => store.pref === '和歌山県') : shown;
+            const pts = (target.length ? target : shown).map(({ store }) => [store.lat, store.lng]);
+            map.fitBounds(L.latLngBounds(pts), { padding: [24, 24], maxZoom: 14 });
+          }
+          first = false;
+        }
+
+        for (const el of document.querySelectorAll('.chains input, #pref')) el.addEventListener('change', render);
+
+        let me;
+        document.getElementById('locate').addEventListener('click', () => map.locate({ setView: true, maxZoom: 13 }));
+        map.on('locationfound', (e) => {
+          if (me) me.remove();
+          me = L.circleMarker(e.latlng, { radius: 8, color: '#fff', weight: 3, fillColor: '#2f6fd6', fillOpacity: 1 }).addTo(map);
+        });
+        map.on('locationerror', () => alert('現在地を取得できませんでした。位置情報の許可を確認してください。'));
+
+        render();
+      }
+    </script>
+
+    <style is:global>
+      :root {
+        --bg: #f5f3ef;
+        --card: #ffffff;
+        --ink: #23211e;
+        --muted: #6b6760;
+        --line: #dcd8d0;
+        --bar: #3c3a36;
+        --chain-0: #d23b2f;
+        --chain-1: #2e8b57;
+        --chain-2: #1f6fb2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171614;
+          --card: #22201d;
+          --ink: #ece8e1;
+          --muted: #a6a197;
+          --line: #3a3732;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+        line-height: 1.6;
+      }
+      .bar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+        background: var(--bar);
+        color: #fff;
+      }
+      .bar h1 { margin: 0; font-size: 1.1rem; letter-spacing: 0.06em; }
+      .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+      .chains { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        font-size: 0.82rem;
+        cursor: pointer;
+        user-select: none;
+      }
+      .chip input { position: absolute; opacity: 0; pointer-events: none; }
+      .chip small { opacity: 0.75; }
+      .chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); border: 1px solid #fff; }
+      .chip:has(input:not(:checked)) { opacity: 0.45; }
+      .chip:has(input:checked) { background: rgba(255, 255, 255, 0.14); }
+      .chip:has(input:focus-visible) { outline: 2px solid #fff; outline-offset: 2px; }
+      #pref {
+        padding: 4px 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        background: transparent;
+        color: #fff;
+        font-size: 0.82rem;
+      }
+      #pref option { color: #23211e; }
+      .empty { max-width: 640px; margin: 24px auto; padding: 0 16px; }
+      .map-wrap { position: relative; }
+      #map { height: 58vh; min-height: 320px; }
+      .locate {
+        position: absolute;
+        right: 12px;
+        bottom: 24px;
+        z-index: 500;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: none;
+        background: var(--card);
+        color: var(--ink);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      .leaflet-popup-content { margin: 12px 14px; }
+      .card h3 { margin: 6px 0 4px; font-size: 1rem; color: #23211e; }
+      .card .meta { margin: 0 0 2px; color: #3f3c37; font-size: 0.8rem; }
+      .card .addr { margin: 4px 0 10px; color: #6b6760; font-size: 0.75rem; }
+      .card .approx { margin: -4px 0 10px; color: #a0522d; font-size: 0.72rem; }
+      .badge {
+        display: inline-block;
+        padding: 0 8px;
+        border-radius: 4px;
+        background: var(--c);
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 700;
+      }
+      .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .btn {
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #bdb8ae;
+        color: #23211e !important;
+        text-decoration: none;
+        font-size: 0.8rem;
+      }
+      .btn-primary { background: #3c3a36; border-color: #3c3a36; color: #fff !important; font-weight: 700; }
+      .list { max-width: 640px; margin: 0 auto; padding: 12px 16px 0; }
+      .count { margin: 0 0 8px; color: var(--muted); font-size: 0.85rem; }
+      .list ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 9px 14px;
+        text-align: left;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .row .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
+      .row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .row-name { font-size: 0.92rem; }
+      .row-addr { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      footer { max-width: 640px; margin: 0 auto; padding: 24px 16px calc(32px + env(safe-area-inset-bottom)); font-size: 0.75rem; color: var(--muted); }
+      footer p { margin: 0 0 6px; }
+    </style>
+  </body>
+</html>
