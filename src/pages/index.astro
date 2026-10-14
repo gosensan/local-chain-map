@@ -4,12 +4,12 @@
 import data from '../data/stores.json';
 
 const { updatedAt, stores } = data;
-const title = 'ローカルチェーン店マップ｜オークワ・エバグリーン';
-const description = '和歌山発のスーパー「オークワ」「スーパーエバグリーン」とドラッグストア「エバグリーン」の店舗を地図で探せます。';
+const title = 'ローカルチェーン店マップ｜オークワ・エバグリーン・よってって';
+const description = '和歌山発のスーパー「オークワ」「スーパーエバグリーン」、ドラッグストア「エバグリーン」、産直市場「よってって」の店舗を地図で探せます。';
 
-const CHAIN_ORDER = ['オークワ', 'スーパーエバグリーン', 'エバグリーン'];
+const CHAIN_ORDER = ['オークワ', 'スーパーエバグリーン', 'エバグリーン', 'よってって'];
 const chains = CHAIN_ORDER.filter((c) => stores.some((s) => s.chain === c));
-const PREF_ORDER = ['和歌山県', '大阪府', '奈良県', '三重県', '愛知県', '岐阜県', '静岡県'];
+const PREF_ORDER = ['和歌山県', '大阪府', '奈良県', '兵庫県', '三重県', '愛知県', '岐阜県', '静岡県'];
 const prefs = [...new Set(stores.map((s) => s.pref))].sort(
   (a, b) => (PREF_ORDER.indexOf(a) + 1 || 99) - (PREF_ORDER.indexOf(b) + 1 || 99)
 );
@@ -213,6 +213,7 @@ const countBy = (key, value) => stores.filter((s) => s[key] === value).length;
         --chain-0: #d23b2f;
         --chain-1: #2e8b57;
         --chain-2: #1f6fb2;
+        --chain-3: #e08a12;
       }
       @media (prefers-color-scheme: dark) {
         :root {

@@ -20,6 +20,8 @@ const PAGES = [
   { name: 'okuwa-shizuoka', url: 'https://www.okuwa.net/store/shizuoka.html' },
   // エバグリーン（廣岡グループ）：全店の一覧
   { name: 'hirooka-store', url: 'https://hirooka-g.co.jp/store/' },
+  // よってって：店舗ページはJavaScriptがこのJSONを読んで表示している（開発者ツールで発見）
+  { name: 'yottette-shoplist', url: 'https://www.yottette.jp/js/lib/shoplist.json', ext: 'json' },
 ];
 
 const WAIT_MS = 2000;
@@ -33,7 +35,7 @@ await mkdir(dir, { recursive: true });
 
 let fetched = 0;
 for (const page of PAGES) {
-  const file = new URL(`${page.name}.html`, dir);
+  const file = new URL(`${page.name}.${page.ext || 'html'}`, dir);
   if (!force && (await exists(file))) {
     console.log(`保存済み  ${page.name}`);
     continue;
